@@ -1,0 +1,11 @@
+{
+  "name": "Warplet #1037071",
+  "description": "The Warplets are memetic creatures and an important part of Farcaster lore. This is a collection of unique Warplets generated using Farcaster data for each user.",
+  "image": "ipfs://bafkreifes5xhdnhbfyzqz4gw6nla7menypkgoocqdtcz32g6w2qqt3lj64",
+  "attributes": [
+    {
+      "trait_type": "Species",
+      "value": "Warplet"
+    }
+  ]
+}
