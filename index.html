@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warplets Trait Browser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar styling */
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 8px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Accordion chevron rotation */
+        .accordion-trigger svg {
+            transition: transform 0.2s ease;
+        }
+        .accordion-item.expanded .accordion-trigger svg {
+            transform: rotate(180deg);
+        }
+
+        /* Accordion content animation */
+        .accordion-content {
+            overflow: hidden;
+            transition: max-height 0.2s ease;
+        }
+        .accordion-item:not(.expanded) .accordion-content {
+            max-height: 0;
+        }
+        .accordion-item.expanded .accordion-content {
+            max-height: 1000px;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Notice Modal -->
+    <div id="modalOverlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-[1000] flex items-center justify-center">
+        <div class="bg-white rounded-2xl p-8 max-w-lg w-[90%] shadow-2xl text-center">
+            <h2 class="text-2xl text-gray-800 mb-4">Important Notice</h2>
+            <p class="text-base text-gray-600 leading-relaxed mb-6">These traits are taken from warpletscan (https://warpletscan.xyz/), so if any inconsistencies or missing data reach out to them.</p>
+            <button onclick="closeModal()" class="block mx-auto px-8 py-3 bg-[#667eea] text-white border-none rounded-lg text-base font-semibold cursor-pointer transition-colors hover:bg-[#5568d3]">I Understand</button>
+        </div>
+    </div>
+
+    <!-- Item Details Modal -->
+    <div id="itemModalOverlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-[1001] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex-1 overflow-y-auto scrollbar-thin p-6">
+                <div id="itemModalContent"></div>
+            </div>
+            <div class="border-t border-gray-200 p-4 flex justify-end">
+                <button onclick="closeItemModal()" class="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-colors">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-[1800px] mx-auto bg-white min-h-screen flex flex-col md:flex-row">
+        <div class="w-full md:w-1/3 lg:w-1/5 bg-gray-50 border-r border-gray-200">
+            <div class="p-6 md:sticky md:top-0 md:max-h-screen md:overflow-y-auto scrollbar-thin">
+                <h2 class="text-2xl mb-2 text-gray-800">Filters</h2>
+                <button onclick="clearAllFilters()" class="w-full py-2.5 bg-red-600 text-white border-none rounded-lg text-sm font-semibold mb-4 transition-colors hover:bg-red-700">Clear All Filters</button>
+                <div id="facets" class="w-full"></div>
+            </div>
+        </div>
+
+        <div class="w-full md:w-2/3 lg:w-4/5 p-6 flex flex-col">
+            <div class="mb-6 flex items-start justify-between">
+                <div>
+                    <h1 class="text-3xl text-gray-800 mb-2">Warplets Trait Browser</h1>
+                    <div id="resultsInfo" class="text-gray-600 text-sm">Loading...</div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <button id="sortButton" class="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors">
+                            <span id="sortLabel">Sort by Index</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div id="sortDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                            <button onclick="setSortOrder('id')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-t-lg transition-colors">
+                                Sort by Index
+                            </button>
+                            <button onclick="setSortOrder('tokenId')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-b-lg transition-colors">
+                                Sort by FID
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <button id="sortDirectionButton" class="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors">
+                            <span id="sortDirectionLabel">Ascending</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div id="sortDirectionDropdown" class="hidden absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                            <button onclick="setSortDirection('asc')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-t-lg transition-colors">
+                                Ascending
+                            </button>
+                            <button onclick="setSortDirection('desc')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-b-lg transition-colors">
+                                Descending
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto scrollbar-thin">
+                <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mb-6"></div>
+                <div id="loading" class="text-center py-10 text-gray-600 text-lg">Loading data...</div>
+                <div id="noResults" class="hidden text-center py-16 text-gray-400">
+                    <h2 class="text-2xl mb-2">No items found</h2>
+                    <p>Try adjusting your filters</p>
+                </div>
+            </div>
+            <div id="pagination" class="flex justify-center items-center gap-2 mt-6"></div>
+        </div>
+    </div>
+
+    <script>
+        let allItems = [];
+        let allTokens = [];
+        let traitCounts = {};
+        let filteredItems = [];
+        let currentPage = 1;
+        const itemsPerPage = 30;
+        const activeFilters = {};
+        let sortOrder = 'id'; // 'id' or 'tokenId'
+        let sortDirection = 'asc'; // 'asc' or 'desc'
+
+        // Load data
+        async function loadData() {
+            try {
+                const [allTokensResponse, traitsResponse, countsResponse] = await Promise.all([
+                    fetch('all_tokens.json'),
+                    fetch('traits.json'),
+                    fetch('trait-counts.json')
+                ]);
+
+                allTokens = await allTokensResponse.json();
+                const traitsData = await traitsResponse.json();
+                traitCounts = await countsResponse.json();
+
+                // Create a map of trait data by tokenId
+                const traitsMap = new Map();
+                traitsData.forEach(trait => {
+                    traitsMap.set(trait.tokenId, trait);
+                });
+
+                // Build allItems from allTokens, merging trait data where available
+                allItems = allTokens.map(token => {
+                    const traitData = traitsMap.get(token.tokenId);
+                    if (traitData) {
+                        // Merge token index with trait data
+                        return {
+                            ...traitData,
+                            index: token.index
+                        };
+                    } else {
+                        // Token without trait data - create minimal entry
+                        return {
+                            tokenId: token.tokenId,
+                            index: token.index,
+                            traits: null,
+                            imageUrl: null,
+                            username: null,
+                            openseaLink: `https://opensea.io/assets/base/0x699727f9e01a822efdcf7333073f0461e5914b4e/${token.tokenId}`
+                        };
+                    }
+                });
+
+                // Ensure allItems is sorted by index initially
+                allItems.sort((a, b) => {
+                    const aIndex = a.index !== undefined ? a.index : Infinity;
+                    const bIndex = b.index !== undefined ? b.index : Infinity;
+                    return aIndex - bIndex;
+                });
+
+                // Expand first few facets by default (handled in buildFacets)
+
+                // Load filters from query string if present
+                loadFiltersFromQueryString();
+                
+                buildFacets();
+                applyFilters(); // This will apply the current sort order
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('loading').textContent = 'Error loading data. Make sure traits.json and trait-counts.json are in the same directory.';
+            }
+        }
+
+        // Calculate dynamic counts for a trait based on current active filters
+        function calculateDynamicCounts(traitName) {
+            const counts = {};
+            
+            // First, filter items based on all active filters EXCEPT the current trait
+            const filtersForCount = { ...activeFilters };
+            delete filtersForCount[traitName];
+            
+            const itemsMatchingOtherFilters = allItems.filter(item => {
+                if (!item.traits) return false;
+                
+                // Check if item matches all other active filters
+                for (const [filterTraitName, selectedValues] of Object.entries(filtersForCount)) {
+                    const itemValue = item.traits[filterTraitName];
+                    let itemValueStr;
+                    
+                    if (itemValue === null) {
+                        itemValueStr = 'null';
+                    } else if (Array.isArray(itemValue)) {
+                        itemValueStr = JSON.stringify(itemValue);
+                    } else {
+                        itemValueStr = String(itemValue);
+                    }
+                    
+                    if (!selectedValues.includes(itemValueStr)) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            // Now count occurrences of each value for the current trait
+            itemsMatchingOtherFilters.forEach(item => {
+                if (!item.traits) return;
+                
+                const itemValue = item.traits[traitName];
+                let valueStr;
+                
+                if (itemValue === null) {
+                    valueStr = 'null';
+                } else if (Array.isArray(itemValue)) {
+                    valueStr = JSON.stringify(itemValue);
+                } else {
+                    valueStr = String(itemValue);
+                }
+                
+                counts[valueStr] = (counts[valueStr] || 0) + 1;
+            });
+            
+            return counts;
+        }
+
+        // Build facet filters with accordion pattern
+        function buildFacets() {
+            const facetsContainer = document.getElementById('facets');
+
+            facetsContainer.innerHTML = '';
+
+            Object.keys(traitCounts).forEach((traitName, index) => {
+                // Calculate dynamic counts based on current active filters
+                const dynamicCounts = calculateDynamicCounts(traitName);
+                
+                // Get all possible values from the original traitCounts
+                const allTraitValues = Object.keys(traitCounts[traitName]);
+                
+                // Build sorted values with dynamic counts
+                const sortedValues = allTraitValues
+                    .map(value => [value, dynamicCounts[value] || 0])
+                    .filter(([value, count]) => {
+                        // Only show values that have at least one matching item (or are currently selected)
+                        const isSelected = activeFilters[traitName] && activeFilters[traitName].includes(value);
+                        return count > 0 || isSelected;
+                    })
+                    .sort((a, b) => b[1] - a[1]);
+
+                if (sortedValues.length === 0) return;
+
+                // Accordion Item
+                const accordionItem = document.createElement('div');
+                accordionItem.className = 'accordion-item border-b border-gray-200 last:border-b-0';
+                // Keep accordion expanded if it has active filters
+                const hasActiveFilters = activeFilters[traitName] && activeFilters[traitName].length > 0;
+                if (hasActiveFilters) {
+                    accordionItem.classList.add('expanded');
+                }
+                
+                // Accordion Trigger
+                const trigger = document.createElement('button');
+                trigger.className = 'accordion-trigger flex flex-1 items-center justify-between py-4 font-medium transition-all hover:no-underline [&[data-state=open]>svg]:rotate-180 w-full text-left';
+                trigger.onclick = (e) => {
+                    e.preventDefault();
+                    accordionItem.classList.toggle('expanded');
+                };
+                
+                // Calculate total available items for this trait category
+                const totalAvailable = Object.values(dynamicCounts).reduce((sum, count) => sum + count, 0);
+                
+                trigger.innerHTML = `
+                    <div class="flex-1">
+                        <div class="font-semibold text-gray-800 text-base">${traitName.replace(/_/g, ' ')}</div>
+                        <div class="text-gray-600 text-sm font-normal">${sortedValues.length} values • ${totalAvailable.toLocaleString()} available</div>
+                    </div>
+                    <svg class="h-4 w-4 shrink-0 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m6 9 6 6 6-6"/>
+                    </svg>
+                `;
+
+                // Accordion Content
+                const content = document.createElement('div');
+                content.className = 'accordion-content overflow-hidden text-sm';
+                
+                const contentInner = document.createElement('div');
+                contentInner.className = 'pb-4 pt-0 max-h-[300px] overflow-y-auto scrollbar-thin';
+
+                sortedValues.slice(0, 50).forEach(([value, count]) => {
+                    const option = document.createElement('div');
+                    const isActive = activeFilters[traitName] && activeFilters[traitName].includes(value);
+                    const hasResults = count > 0;
+                    
+                    // Disable styling if no results (unless it's currently selected)
+                    option.className = `flex justify-between items-center px-3 py-2 my-1 rounded-md transition-all ${
+                        !hasResults && !isActive 
+                            ? 'opacity-50 cursor-not-allowed' 
+                            : 'cursor-pointer'
+                    } ${
+                        isActive 
+                            ? 'bg-[#667eea] text-white' 
+                            : hasResults
+                                ? 'hover:bg-gray-100'
+                                : ''
+                    }`;
+                    
+                    if (hasResults || isActive) {
+                        option.onclick = (e) => {
+                            e.stopPropagation();
+                            toggleFilter(traitName, value);
+                        };
+                    }
+                    
+                    option.innerHTML = `
+                        <span class="flex-1 text-sm overflow-hidden text-ellipsis whitespace-nowrap" title="${value}">${value === 'null' ? '(none)' : value}</span>
+                        <span class="${isActive ? 'text-white/90' : hasResults ? 'text-gray-600' : 'text-gray-400'} text-xs ml-2">${count.toLocaleString()}</span>
+                    `;
+                    
+                    contentInner.appendChild(option);
+                });
+
+                content.appendChild(contentInner);
+                accordionItem.appendChild(trigger);
+                accordionItem.appendChild(content);
+                facetsContainer.appendChild(accordionItem);
+            });
+        }
+
+        // Toggle filter
+        function toggleFilter(traitName, value) {
+            if (!activeFilters[traitName]) {
+                activeFilters[traitName] = [];
+            }
+
+            const index = activeFilters[traitName].indexOf(value);
+            if (index > -1) {
+                activeFilters[traitName].splice(index, 1);
+                if (activeFilters[traitName].length === 0) {
+                    delete activeFilters[traitName];
+                }
+            } else {
+                activeFilters[traitName].push(value);
+            }
+
+            updateQueryString();
+            buildFacets();
+            applyFilters();
+        }
+
+        // Clear all filters
+        function clearAllFilters() {
+            Object.keys(activeFilters).forEach(key => delete activeFilters[key]);
+            updateQueryString();
+            buildFacets();
+            applyFilters();
+        }
+
+        // Filter from modal - closes modal and applies filter
+        function filterFromModal(traitName, valueStr) {
+            closeItemModal();
+            
+            // Unescape the value
+            const unescapedValueStr = valueStr.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            
+            // Add filter
+            if (!activeFilters[traitName]) {
+                activeFilters[traitName] = [];
+            }
+            
+            if (!activeFilters[traitName].includes(unescapedValueStr)) {
+                activeFilters[traitName].push(unescapedValueStr);
+            }
+            
+            updateQueryString();
+            buildFacets();
+            applyFilters();
+        }
+
+        // Update URL query string with current filters
+        function updateQueryString() {
+            const params = new URLSearchParams();
+            
+            Object.entries(activeFilters).forEach(([traitName, values]) => {
+                if (values.length > 0) {
+                    params.append(traitName, JSON.stringify(values));
+                }
+            });
+            
+            const newUrl = params.toString() 
+                ? `${window.location.pathname}?${params.toString()}`
+                : window.location.pathname;
+            
+            window.history.pushState({}, '', newUrl);
+        }
+
+        // Load filters from query string
+        function loadFiltersFromQueryString() {
+            const params = new URLSearchParams(window.location.search);
+            
+            params.forEach((value, traitName) => {
+                try {
+                    const values = JSON.parse(value);
+                    if (Array.isArray(values)) {
+                        activeFilters[traitName] = values;
+                    }
+                } catch (e) {
+                    // If parsing fails, treat as single value
+                    if (!activeFilters[traitName]) {
+                        activeFilters[traitName] = [];
+                    }
+                    activeFilters[traitName].push(value);
+                }
+            });
+        }
+
+        // Apply filters and sorting
+        function applyFilters() {
+            // If no filters are active, show all items
+            if (Object.keys(activeFilters).length === 0) {
+                filteredItems = allItems;
+            } else {
+                // Filter items that have traits and match the filters
+                filteredItems = allItems.filter(item => {
+                    if (!item.traits) return false;
+
+                    for (const [traitName, selectedValues] of Object.entries(activeFilters)) {
+                        const itemValue = item.traits[traitName];
+                        let itemValueStr;
+                        
+                        if (itemValue === null) {
+                            itemValueStr = 'null';
+                        } else if (Array.isArray(itemValue)) {
+                            itemValueStr = JSON.stringify(itemValue);
+                        } else {
+                            itemValueStr = String(itemValue);
+                        }
+
+                        if (!selectedValues.includes(itemValueStr)) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+            }
+
+            // Sort filtered items
+            sortFilteredItems();
+
+            currentPage = 1;
+            renderGrid();
+            renderPagination();
+            updateResultsInfo();
+        }
+
+        // Sort filtered items based on sortOrder and sortDirection
+        function sortFilteredItems() {
+            filteredItems.sort((a, b) => {
+                let comparison = 0;
+                
+                if (sortOrder === 'id') {
+                    const aIndex = a.index !== undefined ? a.index : Infinity;
+                    const bIndex = b.index !== undefined ? b.index : Infinity;
+                    comparison = aIndex - bIndex;
+                } else if (sortOrder === 'tokenId') {
+                    const aTokenId = a.tokenId !== undefined ? parseInt(a.tokenId) : Infinity;
+                    const bTokenId = b.tokenId !== undefined ? parseInt(b.tokenId) : Infinity;
+                    comparison = aTokenId - bTokenId;
+                }
+                
+                return sortDirection === 'asc' ? comparison : -comparison;
+            });
+        }
+
+        // Set sort order
+        function setSortOrder(order) {
+            sortOrder = order;
+            const sortLabel = document.getElementById('sortLabel');
+            const sortDropdown = document.getElementById('sortDropdown');
+            
+            if (order === 'id') {
+                sortLabel.textContent = 'Sort by ID';
+            } else if (order === 'tokenId') {
+                sortLabel.textContent = 'Sort by FID';
+            }
+            
+            sortDropdown.classList.add('hidden');
+            applyFilters();
+        }
+
+        // Set sort direction
+        function setSortDirection(direction) {
+            sortDirection = direction;
+            const sortDirectionLabel = document.getElementById('sortDirectionLabel');
+            const sortDirectionDropdown = document.getElementById('sortDirectionDropdown');
+            
+            if (direction === 'asc') {
+                sortDirectionLabel.textContent = 'Ascending';
+            } else if (direction === 'desc') {
+                sortDirectionLabel.textContent = 'Descending';
+            }
+            
+            sortDirectionDropdown.classList.add('hidden');
+            applyFilters();
+        }
+
+        // Render grid
+        function renderGrid() {
+            const grid = document.getElementById('grid');
+            const loading = document.getElementById('loading');
+            const noResults = document.getElementById('noResults');
+
+            loading.classList.add('hidden');
+
+            if (filteredItems.length === 0) {
+                grid.classList.add('hidden');
+                noResults.classList.remove('hidden');
+                return;
+            }
+
+            grid.classList.remove('hidden');
+            noResults.classList.add('hidden');
+
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+
+
+            console.log(startIndex, endIndex);
+            const pageItems = filteredItems.slice(startIndex, endIndex);
+
+            grid.innerHTML = '';
+
+            pageItems.forEach(item => {
+                const gridItem = document.createElement('div');
+                gridItem.className = 'bg-white border-2 border-gray-200 rounded-xl overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-[#667eea] cursor-pointer';
+                gridItem.onclick = (e) => {
+                    // Don't open modal if clicking on a link
+                    if (e.target.tagName === 'A' || e.target.closest('a')) {
+                        return;
+                    }
+                    openItemModal(item);
+                };
+
+                const image = document.createElement('img');
+                image.className = 'w-full h-[200px] object-cover bg-gray-100';
+                if (item.imageUrl) {
+                    image.src = item.imageUrl.replace(/cloudflare-ipfs\.com/g, 'ipfs.io');
+                } else {
+                    image.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23f0f0f0" width="200" height="200"/><text x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999">No Image</text></svg>';
+                }
+                image.alt = `Token ${item.tokenId}`;
+                image.onerror = function() {
+                    this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23f0f0f0" width="200" height="200"/><text x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999">No Image</text></svg>';
+                };
+
+                const info = document.createElement('div');
+                info.className = 'p-3';
+                info.innerHTML = `
+                <div class="flex flex-col items-center justify-between">
+                    <div class="grid-item-title font-semibold text-gray-800 mb-1 text-sm">
+                        ${item.username ? `<a href="https://farcaster.xyz/${item.username}" target="_blank" rel="noopener noreferrer" class="text-[#667eea] hover:underline">${item.username} <svg xmlns="http://www.w3.org/2000/svg" class="inline ml-1 mb-0.5" width="16" height="16" fill="none" viewBox="0 0 20 20"><path stroke="#667eea" stroke-width="1.5" d="M11.5 3.5h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1h4"/><path stroke="#667eea" stroke-width="1.5" d="M8.5 11.5 16 4M13.5 4h2.5v2.5"/></svg></a>` : 'Unknown'}
+                    </div>
+
+                    <div class="flex flex-row items-center justify-between w-full">
+                        <div class="grid-item-id text-gray-600 text-xs">FID #${item.tokenId}</div>
+                        <div class="grid-item-traits text-gray-600 text-xs">Index: ${item.index !== undefined ? item.index : 'N/A'}</div>
+                    </div>
+                </div>
+                `;
+
+                if (item.openseaLink) {
+                    info.innerHTML += `<div class="grid-item-opensea mt-2">
+                        <a class="block white-space-nowrap px-8 py-3 bg-[#667eea] text-white border-none rounded-lg text-base font-semibold cursor-pointer transition-colors hover:bg-[#5568d3] text-center" href="${item.openseaLink}" target="_blank">
+                            OpenSea&nbsp;<svg xmlns="http://www.w3.org/2000/svg" class="inline ml-1 mb-0.5" width="16" height="16" fill="none" viewBox="0 0 20 20"><path stroke="#ffffff" stroke-width="1.5" d="M11.5 3.5h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1h4"/><path stroke="#ffffff" stroke-width="1.5" d="M8.5 11.5 16 4M13.5 4h2.5v2.5"/></svg>
+                        </a>
+                    </div>`;
+                }
+
+                gridItem.appendChild(image);
+                gridItem.appendChild(info);
+                grid.appendChild(gridItem);
+            });
+        }
+
+        // Render pagination
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            pagination.innerHTML = `
+                <button onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''} class="px-4 py-2.5 border-2 border-gray-200 bg-white rounded-lg cursor-pointer text-sm transition-all hover:bg-[#667eea] hover:text-white hover:border-[#667eea] disabled:opacity-50 disabled:cursor-not-allowed">First</button>
+                <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-4 py-2.5 border-2 border-gray-200 bg-white rounded-lg cursor-pointer text-sm transition-all hover:bg-[#667eea] hover:text-white hover:border-[#667eea] disabled:opacity-50 disabled:cursor-not-allowed">Prev</button>
+                <div class="px-4 py-2.5 text-gray-600 text-sm">Page ${currentPage} of ${totalPages}</div>
+                <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-4 py-2.5 border-2 border-gray-200 bg-white rounded-lg cursor-pointer text-sm transition-all hover:bg-[#667eea] hover:text-white hover:border-[#667eea] disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+                <button onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''} class="px-4 py-2.5 border-2 border-gray-200 bg-white rounded-lg cursor-pointer text-sm transition-all hover:bg-[#667eea] hover:text-white hover:border-[#667eea] disabled:opacity-50 disabled:cursor-not-allowed">Last</button>
+            `;
+        }
+
+        // Go to page
+        function goToPage(page) {
+            const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+            if (page >= 1 && page <= totalPages) {
+                currentPage = page;
+                renderGrid();
+                renderPagination();
+                updateResultsInfo();
+                document.querySelector('.flex-1.overflow-y-auto').scrollTop = 0;
+            }
+        }
+
+        // Update results info
+        function updateResultsInfo() {
+            const info = document.getElementById('resultsInfo');
+            const total = filteredItems.length;
+            const start = total === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+            const end = Math.min(currentPage * itemsPerPage, total);
+            
+            info.textContent = `Showing ${start.toLocaleString()} - ${end.toLocaleString()} of ${total.toLocaleString()} items`;
+        }
+
+
+        // Get rarity color based on percentage (lower percentage = rarer)
+        function getRarityColor(percentage) {
+            if (percentage < 1) return 'bg-[#EB2879]'; // Ultra rare (top 1%)
+            if (percentage < 5) return 'bg-[#6A3CFF]'; // Very rare (top 5%)
+            if (percentage < 10) return 'bg-purple-500'; // Rare (top 10%)
+            if (percentage < 25) return 'bg-purple-700'; // Uncommon (top 25%)
+            if (percentage < 40) return 'bg-purple-900'; // Uncommon (top 40%)
+            return 'bg-gray-500'; // Common
+        }
+
+        // Calculate trait rarity (1/x format)
+        function getTraitRarity(traitName, traitValue) {
+            if (!traitCounts[traitName]) return null;
+            
+            // Normalize the value string to match how it's stored in traitCounts
+            let valueStr;
+            if (traitValue === null) {
+                valueStr = 'null';
+            } else if (Array.isArray(traitValue)) {
+                valueStr = JSON.stringify(traitValue);
+            } else {
+                valueStr = String(traitValue);
+            }
+
+            // For null values, always count manually to ensure accuracy
+            // Null means the trait doesn't exist or is explicitly null
+            let count;
+            if (traitValue === null) {
+                console.log(`nil: ${traitName}`);
+                count = allItems.filter(item => {
+                    // Count items where trait is missing OR explicitly null/undefined
+                    if (!item.traits) return true; // No traits object = null
+                    if (!(traitName in item.traits)) return true; // Trait key doesn't exist = null
+                    const itemValue = item.traits[traitName];
+                    return itemValue === null || itemValue === undefined;
+                }).length;
+            } else {
+                // For non-null values, get count from traitCounts
+                count = traitCounts[traitName][valueStr];
+                
+                // If not found, count manually
+                if (count === undefined || count === 0) {
+                    count = allItems.filter(item => {
+                        if (!item.traits || !(traitName in item.traits)) return false;
+                        const itemValue = item.traits[traitName];
+                        if (Array.isArray(traitValue)) {
+                            return JSON.stringify(itemValue) === JSON.stringify(traitValue);
+                        }
+                        return String(itemValue) === String(traitValue);
+                    }).length;
+                }
+            }
+            
+            if (count === 0) return null;
+            
+            // Use total number of items in collection
+            const totalItems = allItems.length;
+            if (totalItems === 0) return null;
+            
+            const percentage = (count / totalItems) * 100;
+            const ratio = Math.round(totalItems / count);
+            
+            return {
+                count,
+                total: totalItems,
+                percentage: percentage.toFixed(2),
+                ratio,
+                color: getRarityColor(percentage)
+            };
+        }
+
+        // Check if a string is a hex color code
+        function isHexColor(str) {
+            if (typeof str !== 'string') return false;
+            const hexPattern = /^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+            return hexPattern.test(str.trim());
+        }
+
+        // Open item details modal
+        function openItemModal(item) {
+            const modalOverlay = document.getElementById('itemModalOverlay');
+            const modalContent = document.getElementById('itemModalContent');
+            
+            let traitsHtml = '';
+            if (item.traits) {
+                Object.entries(item.traits).forEach(([traitName, traitValue]) => {
+                    const rarity = getTraitRarity(traitName, traitValue);
+
+
+                    if(traitName === 'eyewear') {console.log(rarity);}
+
+                    if (rarity && rarity.count > 0 || true) {
+                        let valueHtml = '';
+                        
+                        // Handle color palette (array of colors)
+                        if (Array.isArray(traitValue)) {
+                            const allAreColors = traitValue.every(val => isHexColor(String(val)));
+                            if (allAreColors) {
+                                // Display multiple color squares
+                                const colorSquares = traitValue.map(color => {
+                                    const hexCode = String(color).startsWith('#') ? String(color) : '#' + String(color);
+                                    return `<div class="w-5 h-5 rounded border border-gray-300" style="background-color: ${hexCode}" title="${hexCode}"></div>`;
+                                }).join('');
+                                valueHtml = `<div class="flex items-center gap-1.5 flex-wrap">${colorSquares}</div>`;
+                            } else {
+                                // Array but not all colors
+                                valueHtml = `<span class="text-sm text-gray-800">${JSON.stringify(traitValue)}</span>`;
+                            }
+                        } else if (traitValue === null) {
+                            valueHtml = `<span class="text-sm text-gray-800">(none)</span>`;
+                        } else {
+                            // Single value - check if it's a color
+                            const valueDisplay = String(traitValue);
+                            const isColor = isHexColor(valueDisplay);
+                            if (isColor) {
+                                const hexCode = valueDisplay.startsWith('#') ? valueDisplay : '#' + valueDisplay;
+                                valueHtml = `
+                                    <div class="w-5 h-5 rounded border border-gray-300" style="background-color: ${hexCode}" title="${hexCode}"></div>
+                                `;
+                            } else {
+                                valueHtml = `<span class="text-sm text-gray-800">${valueDisplay}</span>`;
+                            }
+                        }
+                        
+                        // Make trait value clickable to filter
+                        const valueStr = traitValue === null ? 'null' : (Array.isArray(traitValue) ? JSON.stringify(traitValue) : String(traitValue));
+                        const escapedTraitName = traitName.replace(/'/g, "\\'");
+                        const escapedValueStr = valueStr.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const clickableValueHtml = `<div class="flex-1 min-w-0 cursor-pointer hover:opacity-70 transition-opacity" onclick="filterFromModal('${escapedTraitName}', '${escapedValueStr}')">${valueHtml}</div>`;
+                        
+                        const showPill = true // valueStr !== 'null';
+
+                            traitsHtml += `
+                            <div class="flex items-center justify-between border-b border-gray-100 last:border-b-0">
+                                <dl class="flex items-center justify-start gap-3 flex-1 min-w-0 py-2">
+                                    <dt class="text-sm font-semibold text-gray-700 flex-shrink-0" style="flex-basis: 40%; flex-grow: 0; flex-shrink: 0; max-width: 40%;">${traitName.replace(/_/g, ' ')}</dt>
+                                    <dd class="text-sm text-gray-600 flex-shrink-0" style="flex-basis: 60%; flex-grow: 1; max-width: 60%;">${clickableValueHtml}</dd>
+                                </dl>
+                               `
+
+                            
+                            if(showPill) {
+                                traitsHtml += `<span class="px-2.5 py-0.5 w-14 text-center rounded-full text-xs font-semibold text-white ${rarity.color} ml-3 flex-shrink-0">
+                                    ${rarity.percentage < 1 ? `${Math.round(rarity.percentage * 100) / 100}%` : `${Math.floor(rarity.percentage)}%`}
+                                </span>`
+                            }
+                            
+                            traitsHtml += `</div>`;
+                    }
+                });
+            }
+            
+            const imageUrl = item.imageUrl ? item.imageUrl.replace(/cloudflare-ipfs\.com/g, 'ipfs.io') : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect fill="%23f0f0f0" width="400" height="400"/><text x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999">No Image</text></svg>';
+            
+            modalContent.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <img src="${imageUrl}" alt="Token ${item.tokenId}" class="w-full rounded-lg mb-4" onerror="this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'400\\' height=\\'400\\'><rect fill=\\'%23f0f0f0\\' width=\\'400\\' height=\\'400\\'/><text x=\\'50%25\\' y=\\'50%25\\' text-anchor=\\'middle\\' dy=\\'.3em\\' fill=\\'%23999\\'>No Image</text></svg>'">
+                        <div class="flex flex-row items-center justify-between">
+                            <div class="text-lg font-semibold text-gray-800">
+                                ${item.username ? `<a href="https://farcaster.xyz/${item.username}" target="_blank" class="text-[#667eea] hover:underline">${item.username} <svg xmlns="http://www.w3.org/2000/svg" class="inline ml-1 mb-0.5" width="16" height="16" fill="none" viewBox="0 0 20 20"><path stroke="#667eea" stroke-width="1.5" d="M11.5 3.5h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1h4"/><path stroke="#667eea" stroke-width="1.5" d="M8.5 11.5 16 4M13.5 4h2.5v2.5"/></svg></a>` : 'Unknown'}
+                            </div>
+                            <div class="text-sm text-gray-600">FID #${item.tokenId}</div>
+                            <div class="text-sm text-gray-600">Index: ${item.index !== undefined ? item.index : 'N/A'}</div>
+                        </div>
+                        ${item.openseaLink ? `<div class="mt-3"><a href="${item.openseaLink}" target="_blank" class="block px-6 py-4 text-center bg-[#667eea] text-white rounded-lg text-md font-semibold hover:bg-[#5568d3] transition-colors">View on OpenSea <svg xmlns="http://www.w3.org/2000/svg" class="inline ml-1 mb-0.5" width="16" height="16" fill="none" viewBox="0 0 20 20"><path stroke="#ffffff" stroke-width="1.5" d="M11.5 3.5h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1h4"/><path stroke="#ffffff" stroke-width="1.5" d="M8.5 11.5 16 4M13.5 4h2.5v2.5"/></svg></a></div>` : ''}
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Traits</h3>
+                        <div class="space-y-0">
+                            ${traitsHtml || '<p class="text-gray-500 text-sm">No traits available</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            modalOverlay.classList.remove('hidden');
+        }
+
+        // Close item details modal
+        function closeItemModal() {
+            const modalOverlay = document.getElementById('itemModalOverlay');
+            modalOverlay.classList.add('hidden');
+        }
+
+        // Close modal when clicking outside
+        const itemModalOverlay = document.getElementById('itemModalOverlay');
+        if (itemModalOverlay) {
+            itemModalOverlay.addEventListener('click', (e) => {
+                if (e.target.id === 'itemModalOverlay') {
+                    closeItemModal();
+                }
+            });
+        }
+
+        // Notice Modal functions
+        function showModal() {
+            const modalOverlay = document.getElementById('modalOverlay');
+            modalOverlay.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            const modalOverlay = document.getElementById('modalOverlay');
+            modalOverlay.classList.add('hidden');
+        }
+
+        // Sort button click handlers
+        document.getElementById('sortButton').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const sortDropdown = document.getElementById('sortDropdown');
+            const sortDirectionDropdown = document.getElementById('sortDirectionDropdown');
+            sortDropdown.classList.toggle('hidden');
+            sortDirectionDropdown.classList.add('hidden');
+        });
+
+        document.getElementById('sortDirectionButton').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const sortDirectionDropdown = document.getElementById('sortDirectionDropdown');
+            const sortDropdown = document.getElementById('sortDropdown');
+            sortDirectionDropdown.classList.toggle('hidden');
+            sortDropdown.classList.add('hidden');
+        });
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            const sortButton = document.getElementById('sortButton');
+            const sortDropdown = document.getElementById('sortDropdown');
+            const sortDirectionButton = document.getElementById('sortDirectionButton');
+            const sortDirectionDropdown = document.getElementById('sortDirectionDropdown');
+            
+            if (!sortButton.contains(e.target) && !sortDropdown.contains(e.target)) {
+                sortDropdown.classList.add('hidden');
+            }
+            
+            if (!sortDirectionButton.contains(e.target) && !sortDirectionDropdown.contains(e.target)) {
+                sortDirectionDropdown.classList.add('hidden');
+            }
+        });
+
+        // Show modal on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            showModal();
+        });
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+</html>
