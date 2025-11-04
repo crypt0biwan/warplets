@@ -5,6 +5,8 @@ This is a WIP repo with some data about The Warplets NFT Project on base chain
 * [Token contract on basescan](https://basescan.org/address/0x699727f9e01a822efdcf7333073f0461e5914b4e)
 * [OpenSea](https://opensea.io/collection/the-warplets-farcaster)
 
+Note: traits are taken from warpletscan (https://warpletscan.xyz/), so if any inconsistencies or missing data reach out to them.
+
 ## Specific tokens
 
 ## 129 tokens IDs from 0 - 999
