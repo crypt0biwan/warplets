@@ -137,18 +137,120 @@
         let sortOrder = 'id'; // 'id' or 'tokenId'
         let sortDirection = 'asc'; // 'asc' or 'desc'
 
-        // Load data
+        // Cache configuration
+        const CACHE_VERSION = '1.0.0';
+        const CACHE_DB_NAME = 'warplets_cache';
+        const CACHE_STORE_NAME = 'data';
+        let db = null;
+
+        // Initialize IndexedDB
+        async function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(CACHE_DB_NAME, 1);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+                        db.createObjectStore(CACHE_STORE_NAME);
+                    }
+                };
+            });
+        }
+
+        // Get data from cache
+        async function getCachedData(key) {
+            try {
+                if (!db) await initDB();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([CACHE_STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(CACHE_STORE_NAME);
+                    const request = store.get(key);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        const result = request.result;
+                        if (result && result.version === CACHE_VERSION) {
+                            resolve(result.data);
+                        } else {
+                            resolve(null);
+                        }
+                    };
+                });
+            } catch (error) {
+                console.warn('Cache read error:', error);
+                return null;
+            }
+        }
+
+        // Store data in cache
+        async function setCachedData(key, data) {
+            try {
+                if (!db) await initDB();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([CACHE_STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(CACHE_STORE_NAME);
+                    const request = store.put({
+                        version: CACHE_VERSION,
+                        data: data,
+                        timestamp: Date.now()
+                    }, key);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve();
+                });
+            } catch (error) {
+                console.warn('Cache write error:', error);
+                // Don't fail if cache write fails, just log it
+            }
+        }
+
+        // Load data with caching
         async function loadData() {
             try {
-                const [allTokensResponse, traitsResponse, countsResponse] = await Promise.all([
-                    fetch('all_tokens.json'),
-                    fetch('traits.json'),
-                    fetch('trait-counts.json')
+                let traitsData;
+                
+                // Try to load from cache first
+                const [cachedTokens, cachedTraits, cachedCounts] = await Promise.all([
+                    getCachedData('all_tokens'),
+                    getCachedData('traits'),
+                    getCachedData('trait-counts')
                 ]);
 
-                allTokens = await allTokensResponse.json();
-                const traitsData = await traitsResponse.json();
-                traitCounts = await countsResponse.json();
+                // If all cached data exists, use it
+                if (cachedTokens && cachedTraits && cachedCounts) {
+                    console.log('Loading data from cache...');
+                    allTokens = cachedTokens;
+                    traitsData = cachedTraits;
+                    traitCounts = cachedCounts;
+                } else {
+                    // Otherwise, fetch from network
+                    console.log('Loading data from network...');
+                    const [allTokensResponse, traitsResponse, countsResponse] = await Promise.all([
+                        fetch('all_tokens.json'),
+                        fetch('traits.json'),
+                        fetch('trait-counts.json')
+                    ]);
+
+                    allTokens = await allTokensResponse.json();
+                    traitsData = await traitsResponse.json();
+                    traitCounts = await countsResponse.json();
+
+                    // Cache the data for next time
+                    await Promise.all([
+                        setCachedData('all_tokens', allTokens),
+                        setCachedData('traits', traitsData),
+                        setCachedData('trait-counts', traitCounts)
+                    ]);
+                    console.log('Data cached successfully');
+                }
 
                 // Create a map of trait data by tokenId
                 const traitsMap = new Map();
